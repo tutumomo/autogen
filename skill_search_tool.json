@@ -1,0 +1,1 @@
+{"title":"search_tool","content":"# DuckDuckGoSearchRun 的 tools\n# !pip install -U duckduckgo-search\nfrom langchain.tools import DuckDuckGoSearchRun\nsearch_tool = DuckDuckGoSearchRun()","file_name":null,"description":null,"timestamp":"2024-02-11T17:29:00.582016","user_id":"default"}

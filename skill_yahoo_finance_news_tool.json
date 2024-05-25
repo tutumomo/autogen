@@ -1,0 +1,1 @@
+{"title":"yahoo_finance_news_tool","content":"# YahooFinanceNewsTool 的 tools\n# !pip install langchain_community\nfrom langchain_community.tools.yahoo_finance_news import YahooFinanceNewsTool\nyahoo_finance_news_tool = YahooFinanceNewsTool()","file_name":null,"description":null,"timestamp":"2024-02-11T17:29:14.592873","user_id":"default"}

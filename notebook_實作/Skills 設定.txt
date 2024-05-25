@@ -1,0 +1,785 @@
+### 以下是利用 autogen 原本預設的 find_papers_arxiv.py 丟給 chatgpt3.5 請他依樣畫葫蘆提供 DuckDuckGoSearchRun 的 skills 程式碼。
+# 結果還是不行。。。
+import os
+import json
+import hashlib
+from langchain.tools import DuckDuckGoSearchRun
+
+def search_duckduckgo(query, max_results=10):
+    """
+    Searches DuckDuckGo for the given query using langchain.tools.DuckDuckGoSearchRun, then returns the search results.
+
+    Args:
+        query (str): The search query.
+        max_results (int, optional): The maximum number of search results to return. Defaults to 10.
+
+    Returns:
+        results (list): A list of dictionaries containing search results, each dictionary typically includes fields such as 'title', 'snippet', and 'url'.
+
+    Example:
+        >>> results = search_duckduckgo("attention is all you need")
+        >>> print(results)
+    """
+
+    key = hashlib.md5(("search_duckduckgo(" + str(max_results) + ")" + query).encode("utf-8")).hexdigest()
+    # Create the cache if it doesn't exist
+    cache_dir = ".cache"
+    if not os.path.isdir(cache_dir):
+        os.mkdir(cache_dir)
+
+    fname = os.path.join(cache_dir, key + ".cache")
+
+    # Cache hit
+    if os.path.isfile(fname):
+        with open(fname, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data
+
+    duckduckgo_search = DuckDuckGoSearchRun(query=query, max_results=max_results)
+    results = duckduckgo_search.run()
+
+    # Save to cache
+    with open(fname, "w", encoding="utf-8") as fh:
+        json.dump(results, fh)
+
+    return results
+
+
+### autogen 的 skills 跟 crewai 的 tools 可以通用
+# 以下是簡易型的 tools
+# DuckDuckGoSearchRun 的 tools
+# !pip install -U duckduckgo-search
+from langchain.tools import DuckDuckGoSearchRun
+search_tool = DuckDuckGoSearchRun()
+
+# YahooFinanceNewsTool 的 tools
+# !pip install langchain_community
+from langchain_community.tools.yahoo_finance_news import YahooFinanceNewsTool
+yahoo_finance_news_tool = YahooFinanceNewsTool()
+
+
+### 以下是從 crewai 偷來的 tools
+"""
+ExaSearchTool 這段程式碼是一個使用了名為Exa的Python套件，並利用langchain套件中的工具，來進行網頁搜尋、查找相似網頁以及獲取網頁內容的類別定義。
+讓我們逐行解釋：
+import os: 導入了Python的os模組，用於與作業系統進行互動。
+from exa_py import Exa: 從exa_py模組中導入了Exa類別，用於執行網頁相關操作。
+from langchain.agents import tool: 從langchain.agents模組中導入了tool裝飾器，用於定義工具函數。
+class ExaSearchTool:: 定義了一個名為ExaSearchTool的類別，用於包裝與Exa和langchain相關操作的方法。
+@tool: 這是一個裝飾器，標記了以下定義的方法是一個工具函數，可以被langchain套件使用。
+def search(query: str):: 定義了一個名為search的方法，該方法接受一個字串型態的查詢參數，並返回相關的網頁搜索結果。
+def find_similar(url: str):: 定義了一個名為find_similar的方法，該方法接受一個字串型態的URL參數，並返回與該URL相似的其他網頁結果。
+def get_contents(ids: str):: 定義了一個名為get_contents的方法，該方法接受一個字串型態的ID參數，並返回該ID對應的網頁內容。這裡使用了eval函數來將字串型態的IDs轉換為列表型態。然後該方法會輸出網頁的內容並返回前1000個字元，並將多個內容以換行符分隔並返回。
+"""
+import os
+from exa_py import Exa
+from langchain.agents import tool
+
+class ExaSearchTool:
+	@tool
+	def search(query: str):
+		"""Search for a webpage based on the query."""
+		return ExaSearchTool._exa().search(f"{query}", use_autoprompt=True, num_results=3)
+
+	@tool
+	def find_similar(url: str):
+		"""Search for webpages similar to a given URL.
+		The url passed in should be a URL returned from `search`.
+		"""
+		return ExaSearchTool._exa().find_similar(url, num_results=3)
+
+	@tool
+	def get_contents(ids: str):
+		"""Get the contents of a webpage.
+		The ids must be passed in as a list, a list of ids returned from `search`.
+		"""
+		ids = eval(ids)
+		contents = str(ExaSearchTool._exa().get_contents(ids))
+		print(contents)
+		contents = contents.split("URL:")
+		contents = [content[:1000] for content in contents]
+		return "\n\n".join(contents)
+
+	def tools():
+		return [ExaSearchTool.search, ExaSearchTool.find_similar, ExaSearchTool.get_contents]
+
+	def _exa():
+		return Exa(api_key=os.environ["EXA_API_KEY"])
+
+"""
+FileTools：
+這段代碼看起來是Python程式碼，它定義了一個名為FileTools的類別，並在該類別中定義了一個方法write_file。以下是這段代碼的解釋：
+from langchain.tools import tool: 這個語句導入了一個叫做tool的模組或函式，它似乎是用來定義一些工具或功能的。
+class FileTools(): 這行代碼定義了一個名為FileTools的Python類別。
+@tool("Write File with content"): 這是一個裝飾器，它將下一個方法write_file標記為一個工具，並提供了一個描述，即"Write File with content"。這個裝飾器的作用可能是將write_file方法註冊為一個可用的工具，以便在其他地方使用。
+def write_file(data): 這是一個方法定義，它接受一個名為data的參數。根據註釋，這個方法用於將特定內容寫入文件。它接受一個data參數，這個data應該是一個使用管道符號（|）分隔的文本，該文本包含兩部分：文件的完整路徑（包括/workdir/template）和要寫入文件的React組件代碼內容。例如，./Keynote/src/components/Hero.jsx|REACT_COMPONENT_CODE_PLACEHOLDER。你需要將REACT_COMPONENT_CODE_PLACEHOLDER替換為你想要寫入文件的實際代碼。
+在try塊中，代碼首先試圖使用|分隔data，以獲取文件路徑和React組件代碼。
+接下來，代碼對文件路徑進行一些處理，例如刪除換行符號、空格和反引號。然後，如果文件路徑不以"./workdir"開頭，它會將路徑修改為以"./workdir"開頭，這可能是相對於某個工作目錄的路徑。
+最後，代碼使用open函式打開文件，將React組件代碼寫入文件，然後返回一條成功的消息，指示文件已經寫入。
+如果在任何步驟中出現異常，則except塊中的代碼會捕獲異常並返回一條錯誤消息，指示輸入格式有問題。
+總結來說，這段代碼定義了一個名為FileTools的類別，該類別包含一個方法write_file，用於將React組件代碼寫入指定的文件中。該方法接受一個特定格式的文本作為參數，並在處理過程中處理文件路徑，然後將代碼寫入文件中。如果一切順利，它將返回成功的消息，否則將返回錯誤消息。
+"""
+from langchain.tools import tool
+
+class FileTools():
+
+  @tool("Write File with content")
+  def write_file(data):
+    """Useful to write a file to a given path with a given content. 
+       The input to this tool should be a pipe (|) separated text 
+       of length two, representing the full path of the file, 
+       including the /workdir/template, and the React 
+       Component code content you want to write to it.
+       For example, `./Keynote/src/components/Hero.jsx|REACT_COMPONENT_CODE_PLACEHOLDER`.
+       Replace REACT_COMPONENT_CODE_PLACEHOLDER with the actual 
+       code you want to write to the file."""
+    try:
+      path, content = data.split("|")
+      path = path.replace("\n", "").replace(" ", "").replace("`", "")
+      if not path.startswith("./workdir"):
+        path = f"./workdir/{path}"
+      with open(path, "w") as f:
+        f.write(content)
+      return f"File written to {path}."
+    except Exception:
+      return "Error with the input format for the tool."
+
+"""
+CalculatorTools：
+這段代碼看起來是Python程式碼，它似乎定義了一個名為CalculatorTools的類別，該類別具有一個裝飾器（@tool("Make a calculation")）和一個名為calculate的方法。
+讓我們一步步解釋這段代碼：
+from langchain.tools import tool: 這個語句導入了一個叫做tool的模組或函式，它似乎是用來定義一些工具或功能的。
+class CalculatorTools(): 這行代碼定義了一個名為CalculatorTools的Python類別。
+@tool("Make a calculation"): 這是一個裝飾器，它將下一個方法calculate標記為一個工具，並提供了一個描述，即"Make a calculation"。這個裝飾器的作用可能是將calculate方法註冊為一個可用的工具，以便在其他地方使用。
+def calculate(operation): 這是一個方法定義，它接受一個名為operation的參數。根據註釋，這個方法用於執行數學計算，例如加法、減法、乘法、除法等。它使用Python的eval函式來評估傳遞給它的operation，這個operation應該是一個數學表達式，例如200*7或5000/2*10。評估結果將被返回。
+總結來說，這個程式碼看起來是定義了一個名為CalculatorTools的類別，該類別具有一個用於執行數學計算的工具方法calculate，這個工具方法可以接受一個數學表達式並返回計算結果。該代碼還使用了tool裝飾器，可能是將calculate方法註冊為一個可用的工具，以便在其他地方使用。
+"""
+from langchain.tools import tool
+
+class CalculatorTools():
+
+  @tool("Make a calcualtion")
+  def calculate(operation):
+    """Useful to perform any mathematical calculations, 
+    like sum, minus, multiplication, division, etc.
+    The input to this tool should be a mathematical 
+    expression, a couple examples are `200*7` or `5000/2*10`
+    """
+    return eval(operation)
+
+"""
+BrowserTools：
+這個 tools 不單單是定義了 tools，是在 tools 裡面就定義了 agent、task，並執行了 task.excute()。
+這段代碼定義了一個名為 BrowserTools 的 Python 類別，其中包含一個方法 scrape_and_summarize_website，用於從網站抓取內容並進行摘要。以下是對代碼的逐行解釋：
+import json - 引入 Python 的 json 模組，用於處理 JSON 格式的數據。
+import os - 引入 os 模組，用於訪問操作系統功能，比如環境變量。
+import requests - 引入 requests 模組，用於發送 HTTP 請求。
+from crewai import Agent, Task - 從 crewai 模組中引入 Agent 和 Task 類別，這些可能是用於處理自動化任務或人工智能相關功能的類別。
+from langchain.tools import tool - 從 langchain.tools 模組中引入 tool 裝飾器，用於定義工具方法。
+from unstructured.partition.html import partition_html - 引入用於處理 HTML 內容的 partition_html 函數。
+BrowserTools 類別定義了 scrape_and_summarize_website 方法：
+使用 @tool("Scrape website content") 裝飾器。
+方法接受一個參數 website，表示要抓取內容的網站 URL。
+構建一個用於向 browserless API 發送請求的 URL，其中包含從環境變量獲取的 API 密鑰。
+創建一個 payload，其中包含要抓取的網站 URL，並將其轉換為 JSON 格式。
+設定 HTTP 請求頭。
+使用 requests 發送 POST 請求到 browserless API，獲取網站的 HTML 內容。
+使用 partition_html 函數處理獲取的 HTML 文本，將其分割為多個元素。
+進行文本處理，將元素轉換為字符串並分割成大小為 8000 字符的塊。
+對每個文本塊進行摘要處理：
+創建一個 Agent 並設置其角色、目標和背景故事。
+創建一個 Task，
+其中包括 Agent 和對文本塊進行摘要的描述。
+執行 Task 來產生摘要。
+將所有摘要收集到一個列表中。
+最後，將所有摘要連接成一個字符串並返回。
+這個方法的主要功能是使用 browserless API 從給定的網站抓取 HTML 內容，然後將這些內容分割、處理並通過 AI 代理（如 Agent 和 Task）生成摘要。這個過程可能用於自動化地從網站收集並簡化信息，特別是在需要快速獲得網站主要內容摘要的情況下。整個過程都以程式化的方式進行，顯示了現代技術在資訊處理和自動化方面的應用。
+"""
+import json
+import os
+
+import requests
+from crewai import Agent, Task
+from langchain.tools import tool
+from unstructured.partition.html import partition_html
+
+class BrowserTools():
+
+  @tool("Scrape website content")
+  def scrape_and_summarize_website(website):
+    """Useful to scrape and summarize a website content"""
+    url = f"https://chrome.browserless.io/content?token={os.environ['BROWSERLESS_API_KEY']}"
+    payload = json.dumps({"url": website})
+    headers = {'cache-control': 'no-cache', 'content-type': 'application/json'}
+    response = requests.request("POST", url, headers=headers, data=payload)
+    elements = partition_html(text=response.text)
+    content = "\n\n".join([str(el) for el in elements])
+    content = [content[i:i + 8000] for i in range(0, len(content), 8000)]
+    summaries = []
+    for chunk in content:
+      agent = Agent(
+          role='Principal Researcher',
+          goal=
+          'Do amazing research and summaries based on the content you are working with',
+          backstory=
+          "You're a Principal Researcher at a big company and you need to do research about a given topic.",
+          allow_delegation=False)
+      task = Task(
+          agent=agent,
+          description=
+          f'Analyze and summarize the content below, make sure to include the most relevant information in the summary, return only the summary nothing else.\n\nCONTENT\n----------\n{chunk}'
+      )
+      summary = task.execute()
+      summaries.append(summary)
+    return "\n\n".join(summaries)
+
+"""
+TemplateTools：
+這段代碼定義了一個名為 TemplateTools 的 Python 類別，其中包含兩個方法，用於處理與學習管理系統相關的網頁模板。以下是對代碼的逐行解釋：
+import json - 引入 Python 的 json 模組，用於處理 JSON 格式的數據。
+import shutil - 引入 shutil 模組，提供了一系列文件和文件夾操作功能。
+from pathlib import Path - 從 pathlib 模組中引入 Path 類別，用於輕鬆處理文件路徑。
+from langchain.tools import tool - 從 langchain.tools 模組中引入 tool 裝飾器，用於定義工具方法。
+TemplateTools 類別定義了兩個方法：
+learn_landing_page_options(input):
+使用 @tool("Learn landing page options") 裝飾器，這可能是為了在某個框架或應用程式中註冊這個工具方法。
+該方法加載一個 JSON 文件（config/templates.json），這個文件可能包含不同的網頁模板選項。
+它返回這些模板選項的 JSON 字符串表示。
+copy_landing_page_template_to_project_folder(landing_page_template):
+使用 @tool("Copy landing page template to project folder") 裝飾器。
+此方法接受一個參數 landing_page_template，表示要使用的模板名稱。
+它計算源文件夾和目標文件夾的路徑（基於提供的模板名稱）。
+使用 shutil.copytree 函數將模板從源路徑複製到目標路徑。
+方法返回一條消息，說明模板已被複製並且可以開始進行修改。
+總的來說，這段代碼提供了一個工具類別，用於從配置文件中學習可用的網頁模板選項，
+以及將選定的模板複製到項目文件夾以供進一步修改。這對於需要快速設置和自定義網頁模板的開發者來說可能非常有用。
+"""
+import json
+import shutil
+from pathlib import Path
+
+from langchain.tools import tool
+
+class TemplateTools():
+
+  @tool("Learn landing page options")
+  def learn_landing_page_options(input):
+    """Learn the templates at your disposal"""
+    templates = json.load(open("config/templates.json"))
+    return json.dumps(templates, indent=2)
+
+  @tool("Copy landing page template to project folder")
+  def copy_landing_page_template_to_project_folder(landing_page_template):
+    """Copy a landing page template to your project 
+    folder so you can start modifying it, it expects 
+    a landing page template folder as input"""
+    source_path = Path(f"templates/{landing_page_template}")
+    destination_path = Path(f"workdir/{landing_page_template}")
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_path, destination_path)
+    return f"Template copied to {landing_page_template} and ready to be modified, main files should be under ./{landing_page_template}/src/components, you should focus on those."
+
+"""
+SECTools：
+這段代碼定義了一個名為 SECTools 的 Python 類別，該類別包含了兩個方法用於搜尋和分析美國證券交易委員會（SEC）提交的報告，特別是 10-Q 和 10-K 表格。以下是對代碼的逐行解釋：
+
+通用部分
+import os - 引入 os 模組，用於訪問操作系統的功能，例如環境變量。
+import requests - 引入 requests 模組，用於發送 HTTP 請求。
+from langchain.tools import tool - 從 langchain.tools 模組中引入 tool 裝飾器，用於定義工具方法。
+from langchain.text_splitter import CharacterTextSplitter - 引入用於文本分割的工具。
+from langchain.embeddings import OpenAIEmbeddings - 引入用於生成文本嵌入的 OpenAI 嵌入模型。
+from langchain_community.vectorstores import FAISS - 引
+入用於建立向量存儲的 FAISS 庫，以便進行高效的相似性搜索。
+7. from sec_api import QueryApi - 引入用於查詢 SEC 數據的 API 模塊。
+
+from unstructured.partition.html import partition_html - 引入用於處理 HTML 文檔的函數。
+search_10q 方法
+使用 @tool("Search 10-Q form") 襝飾器。
+接收一個由股票代碼和查詢問題組成的字符串，用管道符（|）分隔。
+使用 SEC API（通過環境變量中的 API 密鑰）構造查詢，以獲取指定股票的最新 10-Q 表格。
+如果找不到相應的文件，返回一個錯誤信息。
+否則，從返回的文件中提取鏈接，並使用 __embedding_search 方法來搜索和提取相關的回答。
+search_10k 方法
+類似於 search_10q，但用於搜索 10-K 表格（年度報告）。
+__embedding_search 私有方法
+下載並處理指定 URL 的 HTML 內容。
+使用 partition_html 函數將 HTML 內容分割成多個元素。
+使用 CharacterTextSplitter 將文本劃分為更小的部分，以便處理。
+使用 OpenAIEmbeddings 生成文本的嵌入表示。
+使用 FAISS 庫建立向量存儲，並通過嵌入相似性搜索相關答案。
+返回前四個最相關的文檔內容作為答案。
+__download_form_html 私有方法
+用於從給定的 URL 下載 HTML 內容。
+設置 HTTP 請求頭以模擬常見的瀏覽器行為，以確保成功獲取頁面內容。
+總結：
+這個類通過 SEC API 搜索特定股票的 10-Q 和 10-K 報告，解析報告內容，並使用文本嵌入和向量相似性搜索來回答關於報告內容的特定問題。
+這是一個自動化工具，適用於金融分析師或投資者，用於快速獲取和理解公司的財務報告。
+"""
+import os
+import requests
+from langchain.tools import tool
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+
+from sec_api import QueryApi
+from unstructured.partition.html import partition_html
+
+class SECTools():
+  @tool("Search 10-Q form")
+  def search_10q(data):
+    """
+    Useful to search information from the latest 10-Q form for a
+    given stock.
+    The input to this tool should be a pipe (|) separated text of
+    length two, representing the stock ticker you are interested and what
+    question you have from it.
+		For example, `AAPL|what was last quarter's revenue`.
+    """
+    stock, ask = data.split("|")
+    queryApi = QueryApi(api_key=os.environ['SEC_API_API_KEY'])
+    query = {
+      "query": {
+        "query_string": {
+          "query": f"ticker:{stock} AND formType:\"10-Q\""
+        }
+      },
+      "from": "0",
+      "size": "1",
+      "sort": [{ "filedAt": { "order": "desc" }}]
+    }
+
+    fillings = queryApi.get_filings(query)['filings']
+    if len(fillings) == 0:
+      return "Sorry, I couldn't find any filling for this stock, check if the ticker is correct."
+    link = fillings[0]['linkToFilingDetails']
+    answer = SECTools.__embedding_search(link, ask)
+    return answer
+
+  @tool("Search 10-K form")
+  def search_10k(data):
+    """
+    Useful to search information from the latest 10-K form for a
+    given stock.
+    The input to this tool should be a pipe (|) separated text of
+    length two, representing the stock ticker you are interested, what
+    question you have from it.
+    For example, `AAPL|what was last year's revenue`.
+    """
+    stock, ask = data.split("|")
+    queryApi = QueryApi(api_key=os.environ['SEC_API_API_KEY'])
+    query = {
+      "query": {
+        "query_string": {
+          "query": f"ticker:{stock} AND formType:\"10-K\""
+        }
+      },
+      "from": "0",
+      "size": "1",
+      "sort": [{ "filedAt": { "order": "desc" }}]
+    }
+
+    fillings = queryApi.get_filings(query)['filings']
+    if len(fillings) == 0:
+      return "Sorry, I couldn't find any filling for this stock, check if the ticker is correct."
+    link = fillings[0]['linkToFilingDetails']
+    answer = SECTools.__embedding_search(link, ask)
+    return answer
+
+  def __embedding_search(url, ask):
+    text = SECTools.__download_form_html(url)
+    elements = partition_html(text=text)
+    content = "\n".join([str(el) for el in elements])
+    text_splitter = CharacterTextSplitter(
+        separator = "\n",
+        chunk_size = 1000,
+        chunk_overlap  = 150,
+        length_function = len,
+        is_separator_regex = False,
+    )
+    docs = text_splitter.create_documents([content])
+    retriever = FAISS.from_documents(
+      docs, OpenAIEmbeddings()
+    ).as_retriever()
+    answers = retriever.get_relevant_documents(ask, top_k=4)
+    answers = "\n\n".join([a.page_content for a in answers])
+    return answers
+
+  def __download_form_html(url):
+    headers = {
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Accept-Language': 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7',
+      'Cache-Control': 'max-age=0',
+      'Dnt': '1',
+      'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"macOS"',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+
+    response = requests.get(url, headers=headers)
+    return response.text
+
+"""
+SearchTools：
+這段代碼定義了一個名為 SearchTools 的 Python 類別，其中包含兩個用於進行網路搜尋的方法：search_internet 和 search_news。這些方法通過一個外部 API 實現對互聯網和新聞的搜索。以下是對代碼的逐行解釋：
+
+共通部分：
+
+import json - 引入 Python 的 json 模組，用於處理 JSON 格式的數據。
+import os - 引入 os 模組，用於訪問操作系統的功能，例如環境變量。
+import requests - 引入 requests 模組，用於發送 HTTP 請求。
+from langchain.tools import tool - 從 langchain.tools 模組中引入 tool 裝飾器，用於定義工具方法。
+search_internet 方法：
+
+使用 @tool("Search the internet") 裝飾器。
+方法接受一個參數 query，表示要搜索的查詢內容。
+定義要返回的最高結果數量。
+設定 API URL 為 Google SERPer（一種搜索引擎結果頁面解析服務）的搜索接口。
+創建一個 payload 包含搜索查詢，並轉換為 JSON 格式。
+設定 HTTP 請求頭，包括 API 密鑰和內容類型。
+使用 requests 發送 POST 請求並接收響應。
+從響應中提取有關搜索結果的數據。
+遍歷並處理最多四個搜索結果，格式化為包含標題、鏈接和摘要的字符串。
+返回格式化的搜索結果。
+search_news 方法：
+
+與 search_internet 方法類似，但專注於搜索新聞。
+方法使用不同的 API URL (https://google.serper.dev/news) 進行新聞搜索。
+其他操作與
+search_internet 方法類似，包括創建 payload、發送請求、處理響應、格式化結果。
+
+總結：
+
+這兩個方法都使用了第三方 API（SERPer API），透過 Google 搜索引擎進行網絡和新聞的搜索。
+方法中的錯誤處理（例如 try-except 塊和 next）用於處理潛在的鍵值缺失情況。
+返回的結果包括搜索到的項目的標題、鏈接和摘要，格式化為易於閱讀的字符串。
+這些工具類別的方法可以在需要自動化搜索互聯網或新聞資訊的應用場景中使用。
+整體而言，這段代碼展示了如何利用外部 API 和 Python 編程來實現自動化的網絡搜尋功能，對於需要快速獲取和整理網上資訊的場景特別有用。
+"""
+import json
+import os
+
+import requests
+from langchain.tools import tool
+
+class SearchTools():
+  @tool("Search the internet")
+  def search_internet(query):
+    """Useful to search the internet 
+    about a a given topic and return relevant results"""
+    top_result_to_return = 4
+    url = "https://google.serper.dev/search"
+    payload = json.dumps({"q": query})
+    headers = {
+        'X-API-KEY': os.environ['SERPER_API_KEY'],
+        'content-type': 'application/json'
+    }
+    response = requests.request("POST", url, headers=headers, data=payload)
+    results = response.json()['organic']
+    string = []
+    for result in results[:top_result_to_return]:
+      try:
+        string.append('\n'.join([
+            f"Title: {result['title']}", f"Link: {result['link']}",
+            f"Snippet: {result['snippet']}", "\n-----------------"
+        ]))
+      except KeyError:
+        next
+
+    return '\n'.join(string)
+
+  @tool("Search news on the internet")
+  def search_news(query):
+    """Useful to search news about a company, stock or any other
+    topic and return relevant results"""""
+    top_result_to_return = 4
+    url = "https://google.serper.dev/news"
+    payload = json.dumps({"q": query})
+    headers = {
+        'X-API-KEY': os.environ['SERPER_API_KEY'],
+        'content-type': 'application/json'
+    }
+    response = requests.request("POST", url, headers=headers, data=payload)
+    results = response.json()['news']
+    string = []
+    for result in results[:top_result_to_return]:
+      try:
+        string.append('\n'.join([
+            f"Title: {result['title']}", f"Link: {result['link']}",
+            f"Snippet: {result['snippet']}", "\n-----------------"
+        ]))
+      except KeyError:
+        next
+
+    return '\n'.join(string)
+
+### 以下是原本 autogen 的 skills
+"""
+autogenstudio 預設 skills 之一。
+find_papers_arxiv：
+這段代碼的目的是使用arXiv API從arXiv學術文獻數據庫中搜索相關論文，並將搜索結果保存到本地緩存中，以便日後快速訪問。以下是代碼的逐步解釋：
+
+導入所需模塊：
+
+os：用於操作系統相關功能，例如創建目錄。
+re：正則表達式模塊，用於處理字符串。
+json：處理JSON格式數據。
+hashlib：提供數據加密功能，這裡用於生成唯一的緩存鍵。
+arxiv：arXiv API 的一個接口，用於搜索arXiv數據庫。
+定義 search_arxiv 函數：
+
+query：搜索查詢字符串。
+max_results：最多返回的結果數量，預設為10。
+生成緩存鍵：使用MD5對搜索查詢進行加密，以創建獨特的緩存文件名。
+
+創建緩存目錄：如果 .cache 目錄不存在，則創建它。
+
+檢查緩存：如果對應緩存文件存在，則從緩存讀取數據並返回。
+
+處理搜索查詢：
+
+使用正則表達式移除查詢中的特殊字符和操作符（如“and”, “or”, “not”）。
+將查詢轉換為小寫並去除多餘空格。
+執行搜索：使用arXiv模塊執行實際的搜索。
+
+處理搜索結果：
+
+將每篇論文的資訊（如標題、作者、摘要等）整理為字典格式。
+將這些字典添加到結果列表中。
+限制結果數量：如果結果數量超過 max_results，則截斷列表。
+
+保存結果到緩存：將搜索結果以JSON格式保存到緩存文件中。
+
+返回結果：返回處理後的搜索結果列表。
+
+整體而言，這個函數提供了從arXiv檢索學術文獻並將結果緩存到本地的功能，這可以提高重複查詢的效率。
+"""
+import os
+import re
+import json
+import hashlib
+
+def search_arxiv(query, max_results=10):
+    """
+    Searches arXiv for the given query using the arXiv API, then returns the search results. This is a helper function. In most cases, callers will want to use 'find_relevant_papers( query, max_results )' instead.
+
+    Args:
+        query (str): The search query.
+        max_results (int, optional): The maximum number of search results to return. Defaults to 10.
+
+    Returns:
+        jresults (list): A list of dictionaries. Each dictionary contains fields such as 'title', 'authors', 'summary', and 'pdf_url'
+
+    Example:
+        >>> results = search_arxiv("attention is all you need")
+        >>> print(results)
+    """
+
+    import arxiv
+
+    key = hashlib.md5(("search_arxiv(" + str(max_results) + ")" + query).encode("utf-8")).hexdigest()
+    # Create the cache if it doesn't exist
+    cache_dir = ".cache"
+    if not os.path.isdir(cache_dir):
+        os.mkdir(cache_dir)
+
+    fname = os.path.join(cache_dir, key + ".cache")
+
+    # Cache hit
+    if os.path.isfile(fname):
+        fh = open(fname, "r", encoding="utf-8")
+        data = json.loads(fh.read())
+        fh.close()
+        return data
+
+    # Normalize the query, removing operator keywords
+    query = re.sub(r"[^\s\w]", " ", query.lower())
+    query = re.sub(r"\s(and|or|not)\s", " ", " " + query + " ")
+    query = re.sub(r"[^\s\w]", " ", query.lower())
+    query = re.sub(r"\s+", " ", query).strip()
+
+    search = arxiv.Search(query=query, max_results=max_results, sort_by=arxiv.SortCriterion.Relevance)
+
+    jresults = list()
+    for result in search.results():
+        r = dict()
+        r["entry_id"] = result.entry_id
+        r["updated"] = str(result.updated)
+        r["published"] = str(result.published)
+        r["title"] = result.title
+        r["authors"] = [str(a) for a in result.authors]
+        r["summary"] = result.summary
+        r["comment"] = result.comment
+        r["journal_ref"] = result.journal_ref
+        r["doi"] = result.doi
+        r["primary_category"] = result.primary_category
+        r["categories"] = result.categories
+        r["links"] = [str(link) for link in result.links]
+        r["pdf_url"] = result.pdf_url
+        jresults.append(r)
+
+    if len(jresults) > max_results:
+        jresults = jresults[0:max_results]
+
+    # Save to cache
+    fh = open(fname, "w")
+    fh.write(json.dumps(jresults))
+    fh.close()
+    return jresults
+
+"""
+fetch_profile：
+這段代碼定義了一個函數 fetch_user_profile，其主要功能是從給定的網址中抓取並返回該網頁 <body> 標籤內的文本內容。以下是代碼的逐步解釋：
+
+導入所需模塊：
+
+typing 中的 Optional：用於類型標註，表示函數返回值可以是 str 或者 None。
+requests：一個用於發送HTTP請求的Python庫。
+bs4 中的 BeautifulSoup：一個用於解析HTML和XML文件的Python庫。
+定義函數 fetch_user_profile：
+
+接收參數 url，代表個人網站的網址。
+函數返回類型被標註為 Optional[str]，表示可能返回字符串或 None。
+處理請求：
+
+使用 requests.get(url) 向指定的URL發送GET請求。
+檢查HTTP響應的狀態碼。如果狀態碼為200，表示請求成功；否則，函數返回 None。
+解析網頁內容：
+
+如果請求成功，使用 BeautifulSoup 解析響應的文本內容（response.text）。
+使用 soup.find("body") 從解析後的HTML中提取 <body> 標籤的內容。
+提取和返回文本：
+
+如果找到 <body> 標籤，則提取並返回其內部的所有文本，使用 stripped_strings 属性移除前導和尾隨的空白字符。
+如果 <body> 標籤不存在或是空的，函數返回 None。
+異常處理：
+
+使用 try-except 塊捕獲 requests.RequestException 異常（這可能包括網絡問題、無效的URL等）。
+如果捕獲到異常，函數返回 None。
+總結：這個函數的目的是從給定的個人網站URL中抓取網頁正文文本。它首先檢查HTTP請求的成功與否，然後利用 BeautifulSoup 解析HTML內容，最後提取 <body> 標籤中的文本。如果過程中遇到任何問題（如網絡錯誤、HTML解析錯誤等），函數將返回 None。
+
+"""
+from typing import Optional
+import requests
+from bs4 import BeautifulSoup
+
+def fetch_user_profile(url: str) -> Optional[str]:
+    """
+    Fetches the text content from a personal website.
+
+    Given a URL of a person's personal website, this function scrapes
+    the content of the page and returns the text found within the <body>.
+
+    Args:
+        url (str): The URL of the person's personal website.
+
+    Returns:
+        Optional[str]: The text content of the website's body, or None if any error occurs.
+    """
+    try:
+        # Send a GET request to the URL
+        response = requests.get(url)
+        # Check for successful access to the webpage
+        if response.status_code == 200:
+            # Parse the HTML content of the page using BeautifulSoup
+            soup = BeautifulSoup(response.text, "html.parser")
+            # Extract the content of the <body> tag
+            body_content = soup.find("body")
+            # Return all the text in the body tag, stripping leading/trailing whitespaces
+            return " ".join(body_content.stripped_strings) if body_content else None
+        else:
+            # Return None if the status code isn't 200 (success)
+            return None
+    except requests.RequestException:
+        # Return None if any request-related exception is caught
+        return None
+
+"""
+generate_images：
+這段代碼定義了一個名為 generate_and_save_images 的函數，用於根據用戶提供的文字描述，使用OpenAI的DALL-E模型生成圖像，並將生成的圖像保存到磁盤。以下是代碼的逐步解釋：
+
+導入所需模塊：
+
+typing 中的 List：用於類型標註，指定函數返回值為字符串列表。
+uuid：生成唯一標識符（UUID），用於為保存的文件命名。
+requests：一個用於發送HTTP請求的Python庫。
+pathlib 中的 Path：用於處理文件路徑。
+openai：OpenAI提供的Python客戶端，用於與OpenAI的API交互。
+定義函數 generate_and_save_images：
+
+接收參數 query，代表用於生成圖像的文字描述。
+接收可選參數 image_size，指定生成圖像的大小，預設值為 "1024x1024"。
+初始化OpenAI客戶端：使用 OpenAI() 創建一個OpenAI客戶端實例。
+
+生成圖像：
+
+使用 client.images.generate 函數，根據提供的 query 和 image_size 生成圖像。這裡設定 n=1，意味著每次請求生成一張圖像。
+處理和保存圖像：
+
+創建一個空列表 saved_files，用於存儲保存的文件名。
+檢查響應中是否包含圖像數據。如果是，則進行以下操作：
+為每個圖像數據生成一個隨機的UUID作為文件名。
+使用 requests.get 從圖像數據的URL下載圖像。
+如果下載成功（HTTP狀態碼為200），則將圖像內容寫入以UUID命名的文件中。
+將保存的文件路徑添加到 saved_files 列表中。
+如果無法從URL下載圖像或響應中沒有圖像數據，則輸出相應的錯誤消息。
+返回保存的文件名列表：函數返回包含已保存圖像文件名的列表。
+
+總結：這個函數允許用戶根據描述自動生成圖像，並將這些圖像保存到本地。這可以用於自動化圖像生成和存儲的應用場景，例如為文章、網站或社交媒體帖子生成相關圖像。
+"""
+from typing import List
+import uuid
+import requests  # to perform HTTP requests
+from pathlib import Path
+
+from openai import OpenAI
+
+def generate_and_save_images(query: str, image_size: str = "1024x1024") -> List[str]:
+    """
+    Function to paint, draw or illustrate images based on the users query or request. Generates images from a given query using OpenAI's DALL-E model and saves them to disk.  Use the code below anytime there is a request to create an image.
+
+    :param query: A natural language description of the image to be generated.
+    :param image_size: The size of the image to be generated. (default is "1024x1024")
+    :return: A list of filenames for the saved images.
+    """
+
+    client = OpenAI()  # Initialize the OpenAI client
+    response = client.images.generate(model="dall-e-3", prompt=query, n=1, size=image_size)  # Generate images
+
+    # List to store the file names of saved images
+    saved_files = []
+
+    # Check if the response is successful
+    if response.data:
+        for image_data in response.data:
+            # Generate a random UUID as the file name
+            file_name = str(uuid.uuid4()) + ".png"  # Assuming the image is a PNG
+            file_path = Path(file_name)
+
+            img_url = image_data.url
+            img_response = requests.get(img_url)
+            if img_response.status_code == 200:
+                # Write the binary content to a file
+                with open(file_path, "wb") as img_file:
+                    img_file.write(img_response.content)
+                    print(f"Image saved to {file_path}")
+                    saved_files.append(str(file_path))
+            else:
+                print(f"Failed to download the image from {img_url}")
+    else:
+        print("No image data found in the response!")
+
+    # Return the list of saved files
+    return saved_files
+
+# Example usage of the function:
+# generate_and_save_images("A cute baby sea otter")
+

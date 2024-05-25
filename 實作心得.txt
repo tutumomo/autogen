@@ -1,0 +1,9 @@
+雖然 chatgpt 很好用，但也很貴
+autogen 現階段對 gemini 支援度不佳
+不過 autogenstudio 可以調用 ollama、LM Studio，
+等以後支援 gemini 的話，會好用的多。 
+
+gpt-3.5 可以使用的模型：
+gpt-3.5-turbo
+gpt-3.5-turbo-1106
+gpt-3.5-turbo-16k

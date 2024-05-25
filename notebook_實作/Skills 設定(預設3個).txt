@@ -1,0 +1,251 @@
+### 以下是原本 autogen 的 skills
+"""
+find_papers_arxiv：
+這段代碼的目的是使用arXiv API從arXiv學術文獻數據庫中搜索相關論文，並將搜索結果保存到本地緩存中，以便日後快速訪問。以下是代碼的逐步解釋：
+
+導入所需模塊：
+os：用於操作系統相關功能，例如創建目錄。
+re：正則表達式模塊，用於處理字符串。
+json：處理JSON格式數據。
+hashlib：提供數據加密功能，這裡用於生成唯一的緩存鍵。
+arxiv：arXiv API 的一個接口，用於搜索arXiv數據庫。
+
+定義 search_arxiv 函數：
+query：搜索查詢字符串。
+max_results：最多返回的結果數量，預設為10。
+生成緩存鍵：使用MD5對搜索查詢進行加密，以創建獨特的緩存文件名。
+創建緩存目錄：如果 .cache 目錄不存在，則創建它。
+檢查緩存：如果對應緩存文件存在，則從緩存讀取數據並返回。
+
+處理搜索查詢：
+使用正則表達式移除查詢中的特殊字符和操作符（如“and”, “or”, “not”）。
+將查詢轉換為小寫並去除多餘空格。
+執行搜索：使用arXiv模塊執行實際的搜索。
+
+處理搜索結果：
+將每篇論文的資訊（如標題、作者、摘要等）整理為字典格式。
+將這些字典添加到結果列表中。
+限制結果數量：如果結果數量超過 max_results，則截斷列表。
+保存結果到緩存：將搜索結果以JSON格式保存到緩存文件中。
+返回結果：返回處理後的搜索結果列表。
+
+整體而言，這個函數提供了從arXiv檢索學術文獻並將結果緩存到本地的功能，這可以提高重複查詢的效率。
+"""
+import os
+import re
+import json
+import hashlib
+
+def search_arxiv(query, max_results=10):
+    """
+    Searches arXiv for the given query using the arXiv API, then returns the search results. This is a helper function. In most cases, callers will want to use 'find_relevant_papers( query, max_results )' instead.
+
+    Args:
+        query (str): The search query.
+        max_results (int, optional): The maximum number of search results to return. Defaults to 10.
+
+    Returns:
+        jresults (list): A list of dictionaries. Each dictionary contains fields such as 'title', 'authors', 'summary', and 'pdf_url'
+
+    Example:
+        >>> results = search_arxiv("attention is all you need")
+        >>> print(results)
+    """
+
+    import arxiv
+
+    key = hashlib.md5(("search_arxiv(" + str(max_results) + ")" + query).encode("utf-8")).hexdigest()
+    # Create the cache if it doesn't exist
+    cache_dir = ".cache"
+    if not os.path.isdir(cache_dir):
+        os.mkdir(cache_dir)
+
+    fname = os.path.join(cache_dir, key + ".cache")
+
+    # Cache hit
+    if os.path.isfile(fname):
+        fh = open(fname, "r", encoding="utf-8")
+        data = json.loads(fh.read())
+        fh.close()
+        return data
+
+    # Normalize the query, removing operator keywords
+    query = re.sub(r"[^\s\w]", " ", query.lower())
+    query = re.sub(r"\s(and|or|not)\s", " ", " " + query + " ")
+    query = re.sub(r"[^\s\w]", " ", query.lower())
+    query = re.sub(r"\s+", " ", query).strip()
+
+    search = arxiv.Search(query=query, max_results=max_results, sort_by=arxiv.SortCriterion.Relevance)
+
+    jresults = list()
+    for result in search.results():
+        r = dict()
+        r["entry_id"] = result.entry_id
+        r["updated"] = str(result.updated)
+        r["published"] = str(result.published)
+        r["title"] = result.title
+        r["authors"] = [str(a) for a in result.authors]
+        r["summary"] = result.summary
+        r["comment"] = result.comment
+        r["journal_ref"] = result.journal_ref
+        r["doi"] = result.doi
+        r["primary_category"] = result.primary_category
+        r["categories"] = result.categories
+        r["links"] = [str(link) for link in result.links]
+        r["pdf_url"] = result.pdf_url
+        jresults.append(r)
+
+    if len(jresults) > max_results:
+        jresults = jresults[0:max_results]
+
+    # Save to cache
+    fh = open(fname, "w")
+    fh.write(json.dumps(jresults))
+    fh.close()
+    return jresults
+
+"""
+fetch_profile：
+這段代碼定義了一個函數 fetch_user_profile，其主要功能是從給定的網址中抓取並返回該網頁 <body> 標籤內的文本內容。以下是代碼的逐步解釋：
+
+導入所需模塊：
+typing 中的 Optional：用於類型標註，表示函數返回值可以是 str 或者 None。
+requests：一個用於發送HTTP請求的Python庫。
+bs4 中的 BeautifulSoup：一個用於解析HTML和XML文件的Python庫。
+
+定義函數 fetch_user_profile：
+接收參數 url，代表個人網站的網址。
+函數返回類型被標註為 Optional[str]，表示可能返回字符串或 None。
+
+處理請求：
+使用 requests.get(url) 向指定的URL發送GET請求。
+檢查HTTP響應的狀態碼。如果狀態碼為200，表示請求成功；否則，函數返回 None。
+
+解析網頁內容：
+如果請求成功，使用 BeautifulSoup 解析響應的文本內容（response.text）。
+使用 soup.find("body") 從解析後的HTML中提取 <body> 標籤的內容。
+
+提取和返回文本：
+如果找到 <body> 標籤，則提取並返回其內部的所有文本，使用 stripped_strings 属性移除前導和尾隨的空白字符。
+如果 <body> 標籤不存在或是空的，函數返回 None。
+
+異常處理：
+使用 try-except 塊捕獲 requests.RequestException 異常（這可能包括網絡問題、無效的URL等）。
+如果捕獲到異常，函數返回 None。
+
+總結：這個函數的目的是從給定的個人網站URL中抓取網頁正文文本。它首先檢查HTTP請求的成功與否，然後利用 BeautifulSoup 解析HTML內容，最後提取 <body> 標籤中的文本。如果過程中遇到任何問題（如網絡錯誤、HTML解析錯誤等），函數將返回 None。
+"""
+from typing import Optional
+import requests
+from bs4 import BeautifulSoup
+
+def fetch_user_profile(url: str) -> Optional[str]:
+    """
+    Fetches the text content from a personal website.
+
+    Given a URL of a person's personal website, this function scrapes
+    the content of the page and returns the text found within the <body>.
+
+    Args:
+        url (str): The URL of the person's personal website.
+
+    Returns:
+        Optional[str]: The text content of the website's body, or None if any error occurs.
+    """
+    try:
+        # Send a GET request to the URL
+        response = requests.get(url)
+        # Check for successful access to the webpage
+        if response.status_code == 200:
+            # Parse the HTML content of the page using BeautifulSoup
+            soup = BeautifulSoup(response.text, "html.parser")
+            # Extract the content of the <body> tag
+            body_content = soup.find("body")
+            # Return all the text in the body tag, stripping leading/trailing whitespaces
+            return " ".join(body_content.stripped_strings) if body_content else None
+        else:
+            # Return None if the status code isn't 200 (success)
+            return None
+    except requests.RequestException:
+        # Return None if any request-related exception is caught
+        return None
+
+"""
+generate_images：
+這段代碼定義了一個名為 generate_and_save_images 的函數，用於根據用戶提供的文字描述，使用OpenAI的DALL-E模型生成圖像，並將生成的圖像保存到磁盤。以下是代碼的逐步解釋：
+
+導入所需模塊：
+typing 中的 List：用於類型標註，指定函數返回值為字符串列表。
+uuid：生成唯一標識符（UUID），用於為保存的文件命名。
+requests：一個用於發送HTTP請求的Python庫。
+pathlib 中的 Path：用於處理文件路徑。
+openai：OpenAI提供的Python客戶端，用於與OpenAI的API交互。
+
+定義函數 generate_and_save_images：
+接收參數 query，代表用於生成圖像的文字描述。
+接收可選參數 image_size，指定生成圖像的大小，預設值為 "1024x1024"。
+初始化OpenAI客戶端：使用 OpenAI() 創建一個OpenAI客戶端實例。
+
+生成圖像：
+使用 client.images.generate 函數，根據提供的 query 和 image_size 生成圖像。這裡設定 n=1，意味著每次請求生成一張圖像。
+
+處理和保存圖像：
+創建一個空列表 saved_files，用於存儲保存的文件名。
+檢查響應中是否包含圖像數據。如果是，則進行以下操作：
+為每個圖像數據生成一個隨機的UUID作為文件名。
+使用 requests.get 從圖像數據的URL下載圖像。
+如果下載成功（HTTP狀態碼為200），則將圖像內容寫入以UUID命名的文件中。
+將保存的文件路徑添加到 saved_files 列表中。
+如果無法從URL下載圖像或響應中沒有圖像數據，則輸出相應的錯誤消息。
+返回保存的文件名列表：函數返回包含已保存圖像文件名的列表。
+
+總結：這個函數允許用戶根據描述自動生成圖像，並將這些圖像保存到本地。這可以用於自動化圖像生成和存儲的應用場景，例如為文章、網站或社交媒體帖子生成相關圖像。
+"""
+from typing import List
+import uuid
+import requests  # to perform HTTP requests
+from pathlib import Path
+
+from openai import OpenAI
+
+def generate_and_save_images(query: str, image_size: str = "1024x1024") -> List[str]:
+    """
+    Function to paint, draw or illustrate images based on the users query or request. Generates images from a given query using OpenAI's DALL-E model and saves them to disk.  Use the code below anytime there is a request to create an image.
+
+    :param query: A natural language description of the image to be generated.
+    :param image_size: The size of the image to be generated. (default is "1024x1024")
+    :return: A list of filenames for the saved images.
+    """
+
+    client = OpenAI()  # Initialize the OpenAI client
+    response = client.images.generate(model="dall-e-3", prompt=query, n=1, size=image_size)  # Generate images
+
+    # List to store the file names of saved images
+    saved_files = []
+
+    # Check if the response is successful
+    if response.data:
+        for image_data in response.data:
+            # Generate a random UUID as the file name
+            file_name = str(uuid.uuid4()) + ".png"  # Assuming the image is a PNG
+            file_path = Path(file_name)
+
+            img_url = image_data.url
+            img_response = requests.get(img_url)
+            if img_response.status_code == 200:
+                # Write the binary content to a file
+                with open(file_path, "wb") as img_file:
+                    img_file.write(img_response.content)
+                    print(f"Image saved to {file_path}")
+                    saved_files.append(str(file_path))
+            else:
+                print(f"Failed to download the image from {img_url}")
+    else:
+        print("No image data found in the response!")
+
+    # Return the list of saved files
+    return saved_files
+
+# Example usage of the function:
+# generate_and_save_images("A cute baby sea otter")
+
