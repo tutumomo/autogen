@@ -12,7 +12,7 @@ git pull
 
 call ac
 
-pip install -U pyautogen autogenstudio jupyter-ai ipython yfinance panda pyautogui python-dotenv langchain llama_index google-search-results colored duckduckgo-search pypdf Pillow docx2txt
+pip install -U pyautogen autogenstudio jupyter-ai yfinance panda pyautogui python-dotenv langchain llama_index google-search-results colored duckduckgo-search pypdf Pillow docx2txt matplotlib
 
 REM pip install -U git+https://github.com/microsoft/autogen.git@gemini
 
