@@ -22,7 +22,7 @@ from autogen.coding import LocalCommandLineCodeExecutor
 
 config_list = autogen.config_list_from_json(
     "OAI_CONFIG_LIST",
-    filter_dict={"tags": ["gpt-4"]},  # comment out to get all
+    filter_dict={"tags": ["ollama"]},  # comment out to get all
 )
 # When using a single openai endpoint, you can use the following:
 # config_list = [{"model": "gpt-4", "api_key": os.getenv("OPENAI_API_KEY")}]
